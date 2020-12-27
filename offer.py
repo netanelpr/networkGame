@@ -1,5 +1,5 @@
 class Offer:
-    cookie = 0xfeedbeed
+    cookie = 0xfeedbeef
     offer_type = 0x02
     byte_order = "big"
 

@@ -36,9 +36,12 @@ class Client:
 
     def connect_and_run_the_game(self, server_addr, server_port):
         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        client_socket.connect(('127.0.0.1', server_port))
+        try:
+            client_socket.connect(('127.0.0.1', server_port))
         #client_socket.connect((server_addr, server_port))
-
+        except OSError:
+            print("​Error when tring to connect to the server")
+            return
         client_socket.send(encode_string(TEAM_NAME+"\n"))
     
         run_game = True
@@ -68,12 +71,13 @@ class Client:
                 readable_socket, _, _ = select.select([client_socket], [], [], 0)
                 for con in readable_socket:
                     e_game_message = con.recv(1024)
-                    run_game = False
+                    if(len(e_game_message) == 0):
+                        run_game = False
+                    else:
+                         print(decode(e_game_message))
         finally:
             termios.tcsetattr(fd, termios.TCSAFLUSH, oldterm)
             fcntl.fcntl(fd, fcntl.F_SETFL, oldflags)
-
-        print(decode(e_game_message))
     
         #remove
         print(presses)
