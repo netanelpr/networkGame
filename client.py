@@ -18,6 +18,9 @@ class Client:
         self.udp_socket_listener.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         self.udp_socket_listener.bind((BROADCAST_IP_ADDR, BROADCAST_PORT))
 
+    """
+    The main funtion of the client.
+    """
     def run(self):
         print("Client started, listening for offer requests...")
         
@@ -34,11 +37,16 @@ class Client:
             print("​Server disconnected, listening for offer requests...")
 
 
+    """
+    Connect to the server and run the game
+    @param server_addr The server ip address
+    @param server_port The server port
+    """
     def connect_and_run_the_game(self, server_addr, server_port):
         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
             client_socket.connect(('127.0.0.1', server_port))
-        #client_socket.connect((server_addr, server_port))
+            #client_socket.connect((server_addr, server_port))
         except OSError:
             print("​Error when tring to connect to the server")
             return
@@ -61,20 +69,19 @@ class Client:
         presses = 0
         try:
             while run_game:
-                try:
-                    c = sys.stdin.read(1)
-                    if(len(c) == 1):
+                readable, _, _ = select.select([sys.stdin, client_socket], [], [], 0)
+                for reader in readable:
+                    if(reader == sys.stdin):
+                        c = sys.stdin.read(1)
                         presses = presses + 1
                         client_socket.send(encode_string(str(c)))
-                except IOError: pass
-
-                readable_socket, _, _ = select.select([client_socket], [], [], 0)
-                for con in readable_socket:
-                    e_game_message = con.recv(1024)
-                    if(len(e_game_message) == 0):
-                        run_game = False
                     else:
-                         print(decode(e_game_message))
+                        e_game_message = reader.recv(1024)
+                        if(len(e_game_message) == 0):
+                            run_game = False
+                            break
+                        else:
+                            print(decode(e_game_message))
         finally:
             termios.tcsetattr(fd, termios.TCSAFLUSH, oldterm)
             fcntl.fcntl(fd, fcntl.F_SETFL, oldflags)
