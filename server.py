@@ -6,6 +6,7 @@ from datetime import datetime
 
 from offer import Offer
 from encoder import * 
+from game_data import GameData
 
 BROADCAST_PORT = 13117
 BROADCAST_IP_ADDR = "10.0.2.255"
@@ -28,6 +29,7 @@ class Server:
         self.offer = Offer(self.server_port)
 
         self.init_groups_data()
+        self.game_data = GameData()
 
     def init_server_socket(self):
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -145,7 +147,7 @@ class Server:
         names_grop1 = "Group1:\n==\n"
         names_grop1 = names_grop1 + self.get_group_name(self.group1[0])
 
-        names_grop2 = "Group2:\n=="
+        names_grop2 = "Group2:\n==\n"
         names_grop2 = names_grop2 + self.get_group_name(self.group2[0])
 
         return message + names_grop1 + names_grop2 + start_sentence
@@ -168,6 +170,14 @@ class Server:
 
         return points_message + winning_group_message + group_names
 
+    def create_stat_of_the_games_message(self):
+        top_message = "============\nGame stats:\n"
+        close_stat_message = "============\n"
+        most_used_char_tuple = self.game_data.get_most_used_char()
+        most_use_char_message = "Most used char is '{0}' with {1} uses\n".format(most_used_char_tuple[0], most_used_char_tuple[1])
+
+        return top_message + most_use_char_message + close_stat_message
+
     def run_game_wrapper(self):
         self.stop_udp_broadcast()
         self.selector.unregister(self.server_socket)
@@ -188,10 +198,12 @@ class Server:
             
         self.game_core()
 
-        winning_graoup_message = encode_string(self.create_winners_message())
+        winning_group_message = self.create_winners_message()
+        game_stat_message = self.create_stat_of_the_games_message()
+        all_game_data_message = encode_string(winning_group_message + game_stat_message)
         for client in self.connection:
             try:
-                client.send(winning_graoup_message)
+                client.send(all_game_data_message)
             except OSError:
                 self.remove_client_from_game(client)
 
@@ -202,10 +214,12 @@ class Server:
        game_running_for_seconds = 0
        
        while(game_running_for_seconds < 10):
-           events = self.selector.select(0.1)
+           events = self.selector.select(0.001)
            for key, m in events:
                client = key.fileobj
-               client.recv(1)
+               ch = decode(client.recv(1))
+               #client recv return close connection
+               self.game_data.add_char(ch[0])
                group_array = self.groups_dict[client]
                group_array[1] = group_array[1] + 1
 
