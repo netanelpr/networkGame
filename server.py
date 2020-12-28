@@ -2,7 +2,6 @@ import socket
 import threading 
 import time
 import selectors
-from datetime import datetime
 
 from offer import Offer
 from encoder import * 
@@ -23,11 +22,13 @@ class Server:
         self.udp_broadcast_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.udp_broadcast_socket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         self.broadcast_thread = None
-        self.run_broadcast = True     
+        self.run_broadcast = True
+        self.broadcast_iterations = 0
 
         self.init_server_socket()
         self.offer = Offer(self.server_port)
 
+        self.on_game = False;  
         self.init_groups_data()
         self.game_data = GameData()
 
@@ -58,11 +59,21 @@ class Server:
         self.connection_without_team_name = []
 
     def start_udp_broadcast(self):
-        self.run_broadcast = True  
+        self.run_broadcast = True
+        self.broadcast_iterations = 0
         self.broadcast_thread = threading.Thread(target=self.udp_broadcast).start()
 
-    def stop_udp_broadcast(self):
-        self.run_broadcast = False  
+    def udp_broadcast(self):
+        while (self.broadcast_iterations < 10):
+            self.broadcast_iterations = self.broadcast_iterations + 1
+            #remove
+            print("sending broadcast")
+            self.udp_broadcast_socket.sendto(self.offer.get_bytes(), (BROADCAST_IP_ADDR, BROADCAST_PORT))
+            try:
+                time.sleep(1)
+            except SleepInterruptedException:
+                continue
+        self.on_game = True
 
     def add_socket_to_group(self, socket, team_name):
         self.connection_without_team_name.remove(socket)
@@ -114,23 +125,14 @@ class Server:
         self.start_udp_broadcast()
         self.server_socket.listen(10)
         
-        start_game = False
-        accpecpt_connection_start_time = 0
         while True:
-             events = self.selector.select(0.1)
+             events = self.selector.select(0.001)
              for key, m in events:
                 callback = key.data
                 callback(key.fileobj, m)
-                if(not start_game):
-                   start_game = True
-                   accpecpt_connection_start_time = datetime.now()
 
-             if(start_game):
-                 time_since_started_game = (datetime.now() - accpecpt_connection_start_time).seconds
-                 if(time_since_started_game > 10):
-                     print(time_since_started_game)
-                     self.run_game_wrapper()
-                     start_game = False
+             if(self.on_game):
+                 self.run_game_wrapper()
 
         self.server_socket.close()
 
@@ -179,11 +181,11 @@ class Server:
         return top_message + most_use_char_message + close_stat_message
 
     def run_game_wrapper(self):
-        self.stop_udp_broadcast()
         self.selector.unregister(self.server_socket)
         self.run_game()
         print("start sending out offer requests...")
-        self.selector.register(self.server_socket, selectors.EVENT_READ, self.accept) 
+        self.selector.register(self.server_socket, selectors.EVENT_READ, self.accept)
+        self.on_game = False
         self.start_udp_broadcast()
 
     def run_game(self):
@@ -195,7 +197,7 @@ class Server:
                 client.send(start_game_message_encoded)
             except OSError:
                 self.remove_client_from_game(client)
-            
+
         self.game_core()
 
         winning_group_message = self.create_winners_message()
@@ -210,9 +212,9 @@ class Server:
         self.clean_game()
 
     def game_core(self):
-       start_game_time = datetime.now()
+       game_running_since_second = time.time()
        game_running_for_seconds = 0
-       
+
        while(game_running_for_seconds < 10):
            events = self.selector.select(0.001)
            for key, m in events:
@@ -223,8 +225,7 @@ class Server:
                group_array = self.groups_dict[client]
                group_array[1] = group_array[1] + 1
 
-           game_running_for_seconds = (datetime.now() - start_game_time).seconds
-
+           game_running_for_seconds = time.time() - game_running_since_second
     def clean_game(self):
         print("cleaning the game")
 
@@ -233,17 +234,6 @@ class Server:
             client.close()
 
         self.init_groups_data()
-        
-
-    def udp_broadcast(self):
-        while self.run_broadcast:
-            #remove
-            print("sending broadcast")
-            self.udp_broadcast_socket.sendto(self.offer.get_bytes(), (BROADCAST_IP_ADDR, BROADCAST_PORT))
-            try:
-                time.sleep(1)
-            except SleepInterruptedException:
-                continue 
 
 def main():
     server = Server()
