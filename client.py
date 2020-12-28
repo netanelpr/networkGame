@@ -3,11 +3,7 @@ import select
 import termios, fcntl, sys, os
 
 from offer import Offer
-from encoder import * 
-
-BROADCAST_PORT = 13117
-BROADCAST_IP_ADDR = "10.0.2.255"
-BROADCAST_MESSAGE = b"hello"
+from network import * 
 
 TEAM_NAME = "Earthlings"
 
@@ -45,7 +41,7 @@ class Client:
     def connect_and_run_the_game(self, server_addr, server_port):
         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
-            client_socket.connect(('127.0.0.1', server_port))
+            client_socket.connect((NETWORK_ADDR, server_port))
             #client_socket.connect((server_addr, server_port))
         except OSError:
             print("​Error when tring to connect to the server")
@@ -53,9 +49,11 @@ class Client:
         client_socket.send(encode_string(TEAM_NAME+"\n"))
     
         run_game = True
+       
         start_game_message = decode(client_socket.recv(1024)) + "\n"
         e_game_message = ""
 
+        termios.tcflush(sys.stdin, termios.TCIOFLUSH)
         fd = sys.stdin.fileno()
         oldterm = termios.tcgetattr(fd)
         newattr = termios.tcgetattr(fd)

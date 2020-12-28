@@ -4,18 +4,14 @@ import time
 import selectors
 
 from offer import Offer
-from encoder import * 
+from network import * 
 from game_data import GameData
-
-BROADCAST_PORT = 13117
-BROADCAST_IP_ADDR = "10.0.2.255"
-BROADCAST_MESSAGE = b"hello"
 
 class Server:
 
     def __init__(self):
         self.server_port = 0
-        self.server_ip = "127.0.0.1"
+        self.server_ip = NETWORK_ADDR
         self.server_socket = None
         self.selector = selectors.DefaultSelector()
 
@@ -32,6 +28,16 @@ class Server:
         self.init_groups_data()
         self.game_data = GameData()
 
+    """
+    =========================
+    ==== Server network =====
+    =========================
+    """
+
+
+    """
+    Initialize the server socket and the selector
+    """
     def init_server_socket(self):
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.setblocking(False)
@@ -39,8 +45,8 @@ class Server:
         
         self.selector.register(self.server_socket, selectors.EVENT_READ, self.accept)
 
-        host_name = socket.gethostname()
-        self.server_ip = socket.gethostbyname(host_name)
+        #host_name = socket.gethostname()
+        #self.server_ip = socket.gethostbyname(host_name)
         self.server_port = self.server_socket.getsockname()[1]
         print("Server started,listening on IP address {}".format(self.server_ip))
                
@@ -50,19 +56,18 @@ class Server:
         #remove
         print("port",self.server_port)
 
-    def init_groups_data(self):
-        self.group_index = 0
-        self.groups_dict = {}
-        self.group1 = [{}, 0]
-        self.group2 = [{}, 0]
-        self.connection = []
-        self.connection_without_team_name = []
-
+    """
+    Start the udp broadcast
+    """
     def start_udp_broadcast(self):
         self.run_broadcast = True
         self.broadcast_iterations = 0
         self.broadcast_thread = threading.Thread(target=self.udp_broadcast).start()
 
+    """
+    UDP broadcast core, send the broadcast 10 times
+    One broadcast every second
+    """
     def udp_broadcast(self):
         while (self.broadcast_iterations < 10):
             self.broadcast_iterations = self.broadcast_iterations + 1
@@ -75,6 +80,9 @@ class Server:
                 continue
         self.on_game = True
 
+    """
+    Add the socket to one of the play gorups evenly
+    """
     def add_socket_to_group(self, socket, team_name):
         self.connection_without_team_name.remove(socket)
         self.connection.append(socket)
@@ -87,6 +95,9 @@ class Server:
             self.groups_dict[socket] = self.group2
             self.group_index = 0
     
+    """
+    Remove the client from the game.
+    """
     def remove_client_from_game(self, client_socket):
         client_socket.close()
         self.connection.remove(client_socket)
@@ -101,6 +112,11 @@ class Server:
 
         self.selector.unregister(client_socket)
 
+    """
+    Method to handle new connetion to the server.
+    Insert the client socket to the selector to handle the
+    data he need to send (the name of the team)
+    """
     def accept(self, socket, m):
         conn, addr = socket.accept()
         conn.setblocking(False)
@@ -109,6 +125,25 @@ class Server:
         self.connection_without_team_name.append(conn)
         self.selector.register(conn, selectors.EVENT_READ, self.recv_user_name)
 
+    """
+    Ignore all the data from the client. This method is for
+    cleaning the socket read buffer before the game 
+    """
+    def ignore_user_data(self, client_socket, m):
+        try:
+            client_socket.fileno()
+            data = client_socket.recv(256)
+            if(len(data) == 0):
+                self.remove_client_from_game(client_socket)
+        except OSError:
+            self.remove_client_from_game(client_socket)
+
+    """
+    Method to handle the data from the client before the game starts
+    The data need to be the team name. After the data was recived modify
+    the selecotr data of the client read event to be the ignore_user_data method.
+    Use the ignore_user_data until the game will start
+    """
     def recv_user_name(self, client_socket, m):
         try:
             client_socket.fileno()
@@ -116,11 +151,15 @@ class Server:
             if(len(name_encoded) > 0):
                 name = decode(name_encoded)
                 self.add_socket_to_group(client_socket, name)
+                self.selector.modify(client_socket, selectors.EVENT_READ, self.ignore_user_data)
             else:
                 self.remove_client_from_game(client_socket)
         except OSError:
             self.remove_client_from_game(client_socket)
 
+    """
+    The main method of the server.
+    """
     def run(self):
         self.start_udp_broadcast()
         self.server_socket.listen(10)
@@ -136,12 +175,36 @@ class Server:
 
         self.server_socket.close()
 
+    """
+    =========================
+    ======= Game core =======
+    =========================
+    """
+
+    """
+    Init the groups data. Use it before each game
+    """
+    def init_groups_data(self):
+        self.group_index = 0
+        self.groups_dict = {}
+        self.group1 = [{}, 0]
+        self.group2 = [{}, 0]
+        self.connection = []
+        self.connection_without_team_name = []
+
+    """
+    Return all the group names from the group dict
+    """
     def get_group_name(self, group_dict):
         group_names = ""
         for key in group_dict:
             group_names = group_names + group_dict[key] + "\n"
         return group_names
 
+    """
+    Return the start game message.
+    The message follows the format
+    """
     def create_start_game_message(self):
         message = "Welcome to Keyboard Spamming Battle Royale.\n"
         start_sentence = "\nStart pressing keys on your keyboard as fast as you can!!\n"        
@@ -154,6 +217,11 @@ class Server:
 
         return message + names_grop1 + names_grop2 + start_sentence
 
+    """
+    Return the message that concludes the game
+    The message follow the format. In addition there are some stat of
+    the games to this point.
+    """
     def create_winners_message(self):
         group1_points = self.group1[1]
         group2_points = self.group2[1]
@@ -172,6 +240,9 @@ class Server:
 
         return points_message + winning_group_message + group_names
 
+    """
+    Return the stat message.
+    """
     def create_stat_of_the_games_message(self):
         top_message = "============\nGame stats:\n"
         close_stat_message = "============\n"
@@ -180,6 +251,11 @@ class Server:
 
         return top_message + most_use_char_message + close_stat_message
 
+
+    """
+    The run game method. This method wraps the run_game_method in order to clean
+    the data after the game and initialize and organize the server socket and selector
+    """
     def run_game_wrapper(self):
         self.selector.unregister(self.server_socket)
         self.run_game()
@@ -188,6 +264,9 @@ class Server:
         self.on_game = False
         self.start_udp_broadcast()
 
+    """
+    Start the game
+    """
     def run_game(self):
         print("starting the game")
 
@@ -211,6 +290,10 @@ class Server:
 
         self.clean_game()
 
+    """
+    This method is the game core which is the code that
+    recive the keys from the client and handling it.
+    """
     def game_core(self):
        game_running_since_second = time.time()
        game_running_for_seconds = 0
@@ -220,12 +303,22 @@ class Server:
            for key, m in events:
                client = key.fileobj
                ch = decode(client.recv(1))
-               #client recv return close connection
+               
+               #client close the game
+               if(len(ch) == 0):
+                   self.connection.remove(client)
+                   self.selector.unregister(client)
+                   continue
+
                self.game_data.add_char(ch[0])
                group_array = self.groups_dict[client]
                group_array[1] = group_array[1] + 1
 
            game_running_for_seconds = time.time() - game_running_since_second
+
+    """
+    Clean the game data.
+    """
     def clean_game(self):
         print("cleaning the game")
 
