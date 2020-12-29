@@ -10,6 +10,9 @@ TEAM_NAME = "Earthlings"
 class Client:
 
     def __init__(self):
+        self.udp_init()
+
+    def udp_init(self):
         self.udp_socket_listener = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.udp_socket_listener.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         self.udp_socket_listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -33,6 +36,11 @@ class Client:
             self.connect_and_run_the_game(addr[0], tcp_server_port)
             print("​Server disconnected, listening for offer requests...")
 
+            try:
+                self.udp_socket_listener.close()
+            except: pass
+            self.udp_init()
+
 
     """
     Connect to the server and run the game
@@ -42,16 +50,20 @@ class Client:
     def connect_and_run_the_game(self, server_addr, server_port):
         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
-            client_socket.connect((NETWORK_ADDR, server_port))
-            #client_socket.connect((server_addr, server_port))
+            client_socket.connect((server_addr, server_port))
         except OSError:
             print("​Error when tring to connect to the server")
             return
         client_socket.send(encode_string(TEAM_NAME+"\n"))
     
         run_game = True
-       
-        start_game_message = decode(client_socket.recv(1024)) + "\n"
+        start_game_message = ""
+        try:
+            start_game_message = decode(client_socket.recv(1024)) + "\n"
+        except OSError:
+            client_socket.close()
+            return
+
         e_game_message = ""
 
         termios.tcflush(sys.stdin, termios.TCIOFLUSH)
@@ -65,29 +77,24 @@ class Client:
         fcntl.fcntl(fd, fcntl.F_SETFL, oldflags | os.O_NONBLOCK)
 
         print(start_game_message)
-        presses = 0
         try:
             while run_game:
                 readable, _, _ = select.select([sys.stdin, client_socket], [], [], 0)
                 for reader in readable:
                     if(reader == sys.stdin):
                         c = sys.stdin.read(1)
-                        presses = presses + 1
                         client_socket.send(encode_string(str(c)))
                     else:
-                        e_game_message = reader.recv(1024)
+                        e_game_message = decode(reader.recv(1024))
                         if(len(e_game_message) == 0):
                             run_game = False
                             break
                         else:
-                            print(decode(e_game_message))
+                            print(e_game_message)
         finally:
             termios.tcsetattr(fd, termios.TCSAFLUSH, oldterm)
             fcntl.fcntl(fd, fcntl.F_SETFL, oldflags)
-    
-        #remove
-        print(presses)
-    
+
         try:
             client_socket.close()
         except Exeption:
