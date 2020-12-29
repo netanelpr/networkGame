@@ -12,6 +12,7 @@ class Client:
     def __init__(self):
         self.udp_socket_listener = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.udp_socket_listener.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        self.udp_socket_listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.udp_socket_listener.bind((BROADCAST_IP_ADDR, BROADCAST_PORT))
 
     """
