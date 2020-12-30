@@ -232,18 +232,31 @@ class Server:
         group1_points = self.group1[1]
         group2_points = self.group2[1]
         
+        points_message = "Group 1 typed in {0} characters. Group 2 typed in {1} characters.\n".format(group1_points, group2_points)
+        group_names = "Congratulations to the winners:\n==\n"
+        if(group1_points - group2_points == 0):
+            winning_group_message = "Both groups win!\n\n"
+            winners_name1 = self.get_group_name(self.group1[0])
+            winners_name2 = self.get_group_name(self.group2[0])
+            group_dict = self.group1[0]
+            for key in group_dict:
+                self.game_data.add_winner(group_dict[key])
+            group_dict = self.group2[0]
+            for key in group_dict:
+                self.game_data.add_winner(group_dict[key])
+            return points_message + winning_group_message + group_names + winners_name1 + winners_name2
+
         winning_group_index = 1
         winning_group = self.group1
         if(group1_points - group2_points < 0):
             winning_group_index == 2
             winning_group = self.group2
- 
-        points_message = "Group 1 typed in {0} characters. Group 2 typed in {1} characters.\n".format(group1_points, group2_points)
-        winning_group_message = "Group {0} wins!\n\n".format(winning_group_index)        
-
-        group_names = "Congratulations to the winners:\n==\n"
-        winners_name = self.get_group_name(winning_group[0])
-        self.game_data.add_winner(winners_name[:-1])
+        
+        winning_group_message = "Group {0} wins!\n\n".format(winning_group_index)
+        winners_name = self.get_group_name(winning_group[0])  
+        group_dict = winning_group[0]
+        for key in group_dict:
+            self.game_data.add_winner(group_dict[key])
         group_names = group_names + winners_name
 
         return points_message + winning_group_message + group_names
