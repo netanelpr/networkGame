@@ -357,7 +357,10 @@ class Server:
                
                #client close the game
                if(len(ch) == 0):
-                   self.connection.remove(client)
+                   try:
+                       self.connection.remove(client)
+                   except:
+                       pass
                    self.selector.unregister(client)
                    continue
 
