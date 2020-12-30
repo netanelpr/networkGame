@@ -8,8 +8,8 @@ NETWORK_BROADCAST_2 = "172.99.255.255"
 
 try:
     import scapy.all
-    NETWORK_ADDR = scapy.all.get_if_addr(NETWORK_ADAPTER_1)
-    BROADCAST_IP_ADDR = NETWORK_BROADCAST_1
+    NETWORK_ADDR = scapy.all.get_if_addr(NETWORK_ADAPTER_2)
+    BROADCAST_IP_ADDR = NETWORK_BROADCAST_2
 except:
     pass
 

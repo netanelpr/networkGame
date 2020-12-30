@@ -170,7 +170,7 @@ class Server:
         self.server_socket.listen(10)
         
         while True:
-             events = self.selector.select(0.001)
+             events = self.selector.select(0.1)
              for key, m in events:
                 callback = key.data
                 callback(key.fileobj, m)
@@ -350,7 +350,7 @@ class Server:
        game_running_for_seconds = 0
 
        while(game_running_for_seconds < 10):
-           events = self.selector.select(0.001)
+           events = self.selector.select(0.1)
            for key, m in events:
                client = key.fileobj
                ch = decode(client.recv(1))
