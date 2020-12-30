@@ -84,7 +84,7 @@ class Server:
     Add the socket to one of the play gorups evenly
     """
     def add_socket_to_group(self, socket, team_name):
-        self.connection_without_team_name.remove(socket)
+        self.connection_without_team_name.pop(socket, None)
         self.connection.append(socket)
         if(self.group_index == 0):
             self.group1[0][socket] = team_name
@@ -122,7 +122,7 @@ class Server:
         conn.setblocking(False)
 
         #self.add_socket_to_group(conn)
-        self.connection_without_team_name.append(conn)
+        self.connection_without_team_name[conn] = ""
         self.selector.register(conn, selectors.EVENT_READ, self.recv_user_name)
 
     """
@@ -150,7 +150,12 @@ class Server:
             name_encoded = client_socket.recv(1024)
             if(len(name_encoded) > 0):
                 name = decode(name_encoded)
-                self.add_socket_to_group(client_socket, name)
+                nl_char_index = name.find("\n")
+                if(nl_char_index != -1):
+                    name = self.connection_without_team_name[client_socket] + name[:nl_char_index]
+                    self.add_socket_to_group(client_socket, name)
+                else:
+                    self.connection_without_team_name[client_socket] = self.connection_without_team_name[client_socket] + name
                 self.selector.modify(client_socket, selectors.EVENT_READ, self.ignore_user_data)
             else:
                 self.remove_client_from_game(client_socket)
@@ -190,7 +195,7 @@ class Server:
         self.group1 = [{}, 0]
         self.group2 = [{}, 0]
         self.connection = []
-        self.connection_without_team_name = []
+        self.connection_without_team_name = {}
 
     """
     Return all the group names from the group dict
@@ -206,16 +211,17 @@ class Server:
     The message follows the format
     """
     def create_start_game_message(self):
+        server_name = self.server_name_message()
         message = "Welcome to Keyboard Spamming Battle Royale.\n"
         start_sentence = "\nStart pressing keys on your keyboard as fast as you can!!\n"        
 
         names_grop1 = "Group1:\n==\n"
         names_grop1 = names_grop1 + self.get_group_name(self.group1[0])
 
-        names_grop2 = "Group2:\n==\n"
+        names_grop2 = "\nGroup2:\n==\n"
         names_grop2 = names_grop2 + self.get_group_name(self.group2[0])
 
-        return message + names_grop1 + names_grop2 + start_sentence
+        return server_name + message + names_grop1 + names_grop2 + start_sentence
 
     """
     Return the message that concludes the game
@@ -236,20 +242,46 @@ class Server:
         winning_group_message = "Group {0} wins!\n\n".format(winning_group_index)        
 
         group_names = "Congratulations to the winners:\n==\n"
-        group_names = group_names + self.get_group_name(winning_group[0])
+        winners_name = self.get_group_name(winning_group[0])
+        self.game_data.add_winner(winners_name[:-1])
+        group_names = group_names + winners_name
 
         return points_message + winning_group_message + group_names
+
+    def server_name_message(self):
+        server_name = '''
+    _   __     __                   __         ____       _ __  
+   / | / /__  / /______  ____  ____/ /___ _   / __ \_____(_) /__
+  /  |/ / _ \/ //_/ __ \/ __ \/ __  / __ `/  / /_/ / ___/ / //_/
+ / /|  /  __/ ,< / /_/ / /_/ / /_/ / /_/ /  / ____(__  ) / ,<   
+/_/ |_/\___/_/|_|\____/\____/\__,_/\__,_/  /_/   /____/_/_/|_| 
+
+'''
+        return server_name
 
     """
     Return the stat message.
     """
     def create_stat_of_the_games_message(self):
-        top_message = "============\nGame stats:\n"
-        close_stat_message = "============\n"
-        most_used_char_tuple = self.game_data.get_most_used_char()
-        most_use_char_message = "Most used char is '{0}' with {1} uses\n".format(most_used_char_tuple[0], most_used_char_tuple[1])
 
-        return top_message + most_use_char_message + close_stat_message
+        top_message = "========================\n\tGAME STATS:\n\n"
+        close_stat_message = "\n========================\n"
+
+        top_teams_message = "Top teams:\n"
+        top_teams = self.game_data.get_top_three_winners()
+        index = 1
+        for team in top_teams:
+            team_message = "  {0}. {1} with {2} points\n".format(index, team[0], team[1])
+            top_teams_message = top_teams_message + team_message
+            index = index + 1
+
+        number_of_games = self.game_data.get_number_of_games()
+        number_of_games_message = "Number of games played: {0}\n".format(number_of_games)
+
+        most_used_char_tuple = self.game_data.get_most_used_char()
+        most_use_char_message = "Most used char: '{0}' with {1} uses\n".format(most_used_char_tuple[0], most_used_char_tuple[1])
+
+        return top_message + top_teams_message + number_of_games_message + most_use_char_message + close_stat_message
 
 
     """
@@ -270,6 +302,8 @@ class Server:
     def run_game(self):
         print("starting the game")
 
+        self.game_data.inc_number_of_games() 
+
         start_game_message_encoded = encode_string(self.create_start_game_message())
         for client in self.connection:
             try:
@@ -278,6 +312,10 @@ class Server:
                 self.remove_client_from_game(client)
 
         self.game_core()
+
+        if(len(self.connection) == 0):
+            self.clean_game()
+            return
 
         winning_group_message = self.create_winners_message()
         game_stat_message = self.create_stat_of_the_games_message()

@@ -5,7 +5,7 @@ import termios, fcntl, sys, os
 from offer import Offer
 from network import * 
 
-TEAM_NAME = "Earthlings"
+TEAM_NAME = "NekoodaPsik"
 
 class Client:
 
@@ -50,6 +50,7 @@ class Client:
     def connect_and_run_the_game(self, server_addr, server_port):
         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
+            #client_socket.connect(("127.0.0.1", server_port))
             client_socket.connect((server_addr, server_port))
         except OSError:
             print("​Error when tring to connect to the server")
